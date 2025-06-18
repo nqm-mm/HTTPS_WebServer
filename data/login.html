@@ -1,0 +1,29 @@
+<html>
+<head><title>Đăng nhập Admin</title></head>
+<body>
+  <form id="loginForm">
+    <label>Username: <input name="username" id="username"></label><br>
+    <label>Password: <input name="password" id="password" type="password"></label><br>
+    <input type="submit" value="Đăng nhập">
+  </form>
+  <script>
+  document.getElementById('loginForm').onsubmit = function(e) {
+    e.preventDefault();
+    fetch('/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      })
+    }).then(resp => {
+      if (resp.redirected) {
+        window.location = resp.url;
+      } else {
+        resp.text().then(html => document.body.innerHTML = html);
+      }
+    });
+  };
+  </script>
+</body>
+</html>

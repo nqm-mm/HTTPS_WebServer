@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>API Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        button { margin: 0.5em 0; }
+        pre { background: #f4f4f4; padding: 1em; }
+    </style>
+</head>
+<body>
+    <h1>API Demo</h1>
+    <section>
+        <h2>GPIO Control</h2>
+        <input type="number" id="gpioPin" placeholder="GPIO Pin">
+        <select id="gpioState">
+            <option value="on">On</option>
+            <option value="off">Off</option>
+        </select>
+        <button onclick="setGpio()">Set GPIO</button>
+        <pre id="gpioResult"></pre>
+    </section>
+    <script>
+        function setGpio() {
+            const pin = document.getElementById('gpioPin').value;
+            const state = document.getElementById('gpioState').value;
+            fetch('/api/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gpio: pin, state: state })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('gpioResult').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(err => {
+                document.getElementById('gpioResult').textContent = 'Error: ' + err;
+            });
+        }
+    </script>
+    <section>
+        <h2>Uptime</h2>
+        <button onclick="getUptime()">Get Uptime</button>
+        <pre id="uptimeResult"></pre>
+    </section>
+
+    <section>
+        <h2>Events</h2>
+        <button onclick="getEvents()">Get Events</button>
+        <pre id="eventsResult"></pre>
+
+        <h3>Add Event</h3>
+        <input type="text" id="eventData" placeholder="Event data">
+        <button onclick="postEvent()">Add Event</button>
+        <pre id="postEventResult"></pre>
+
+        <h3>Delete Event</h3>
+        <input type="text" id="deleteEventId" placeholder="Event ID">
+        <button onclick="deleteEvent()">Delete Event</button>
+        <pre id="deleteEventResult"></pre>
+    </section>
+
+    <script>
+        function getUptime() {
+            fetch('/api/uptime')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('uptimeResult').textContent = JSON.stringify(data, null, 2);
+                })
+                .catch(err => {
+                    document.getElementById('uptimeResult').textContent = 'Error: ' + err;
+                });
+        }
+
+        function getEvents() {
+            fetch('/api/events')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('eventsResult').textContent = JSON.stringify(data, null, 2);
+                })
+                .catch(err => {
+                    document.getElementById('eventsResult').textContent = 'Error: ' + err;
+                });
+        }
+
+        function postEvent() {
+            const eventData = document.getElementById('eventData').value;
+            fetch('/api/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: eventData })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('postEventResult').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(err => {
+                document.getElementById('postEventResult').textContent = 'Error: ' + err;
+            });
+        }
+
+        function deleteEvent() {
+            const eventId = document.getElementById('deleteEventId').value;
+            fetch('/api/events/' + encodeURIComponent(eventId), {
+                method: 'DELETE'
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('deleteEventResult').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(err => {
+                document.getElementById('deleteEventResult').textContent = 'Error: ' + err;
+            });
+        }
+    </script>
+</body>
+</html>
