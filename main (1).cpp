@@ -1,4 +1,3 @@
-
 /**
  * Example for the ESP32 HTTP(S) Webserver
  *
@@ -49,12 +48,13 @@
  * 
  * 2. Lấy danh sách sự kiện:
  *    - Gửi GET tới /api/events
- *    - Kết quả trả về: [{"user":25,"state":1,"time":1710000000,"id":0}, ...]
+ *    - Kết quả trả về: [{"gpio":25,"state":1,"time":1710000000,"id":0}, ...]
  * 
  * 3. Thêm sự kiện mới:
+ * 
  *    - Gửi POST tới /api/events với body JSON:
- *      {"user":25,"state":1,"time":1710000000}
- *    - Kết quả trả về: {"user":25,"state":1,"time":1710000000,"id":0}
+ *      {"gpio":25,"state":1,"time":1710000000}
+ *    - Kết quả trả về: {"gpio":25,"state":1,"time":1710000000,"id":0}
  * 
  * 4. Xóa sự kiện:
  *    - Gửi DELETE tới /api/events/0
@@ -377,10 +377,10 @@ void loop() {
     } 
   // Other code would go here...
   delay(1);
-}//loop
+}
 
 /**
- * This function will either read the certificate and private key from LittleFS or
+ * This function will either read the certificate and private key from SPIFFS or
  * create a self-signed certificate and write it to SPIFFS for next boot
  */
 SSLCert * getCertificate() {
@@ -465,10 +465,12 @@ SSLCert * getCertificate() {
 }
 
 /**
- * This handler function will try to load the requested resource from LittleFS's /public folder.
+ * This handler function will try to load the requested resource from SPIFFS's /public folder.
+ * 
  * If the method is not GET, it will throw 405, if the file is not found, it will throw 404.
  */
 void handleLittleFS(HTTPRequest * req, HTTPResponse * res) {
+	
   // We only handle GET here
   if (req->getMethod() == "GET") {
     // Redirect / to /index.html
@@ -508,8 +510,8 @@ void handleLittleFS(HTTPRequest * req, HTTPResponse * res) {
       length = file.read(buffer, 256);
       res->write(buffer, length);
     } while (length > 0);
-    file.close();
 
+    file.close();
   } else {
     // If there's any body, discard it
     req->discardRequestBody();
@@ -569,12 +571,9 @@ void handleGetEvents(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Content-Type", "application/json");
   arr.printTo(*res);
 }
-  
-unsigned long eTime = 0;
-int eGpio = 0;
-int eState = LOW;
-
-
+  unsigned long eTime = 0;
+  int eGpio = 0;
+  int eState = LOW;
   /**
    * Ghi lịch sử vào file nhị phân (binary) để tiết kiệm bộ nhớ
    * Mỗi bản ghi: userCode (uint32_t), state (uint8_t), time (uint32_t)
@@ -586,13 +585,7 @@ int eState = LOW;
     uint32_t epochtime;
   };
 
-  /**
-   * Lưu lịch sử vào file nhị phân
-   * userCode: mã người dùng (uint32_t)
-   * state: trạng thái (uint8_t)
-   * epochtime: thời gian epoch (uint32_t)
-   */
-void saveHistory(uint32_t userCode, uint8_t state, uint32_t epochtime) {
+  void saveHistory(uint32_t userCode, uint8_t state, uint32_t epochtime) {
     File f = LittleFS.open(HISTORY_FILE, FILE_APPEND);
     if (!f) return;
     HistoryRecord rec;
@@ -607,33 +600,24 @@ void saveHistory(uint32_t userCode, uint8_t state, uint32_t epochtime) {
    * API: GET /api/history?start=epochtime&end=epochtime
    * Trả về danh sách lịch sử trong khoảng thời gian
    */
-void handleGetHistory(HTTPRequest * req, HTTPResponse * res) {
+  void handleGetHistory(HTTPRequest * req, HTTPResponse * res) {
     // Lấy tham số start, end
-    std::string reqStr = req->getRequestString();// Lấy chuỗi yêu cầu từ HTTPRequest
-    std::string query;// Biến để lưu phần query string
-    size_t qpos = reqStr.find('?');// Tìm vị trí dấu hỏi trong chuỗi yêu cầu
-
-    // Nếu có dấu hỏi, lấy phần sau dấu hỏi làm query
+    std::string reqStr = req->getRequestString();
+    std::string query;
+    size_t qpos = reqStr.find('?');
     if (qpos != std::string::npos) {
-      query = reqStr.substr(qpos + 1);// Lấy phần sau dấu hỏi
+      query = reqStr.substr(qpos + 1);
     } else {
       query = "";
     }
-
-    // Mặc định start = 0, end = 0xFFFFFFFF (tức là toàn bộ lịch sử)
     uint32_t start = 0, end = 0xFFFFFFFF;
     size_t spos = query.find("start=");
-    if (spos != std::string::npos) {// Tìm tham số start trong query
-      // Nếu có, lấy giá trị sau dấu "="
+    if (spos != std::string::npos) {
       size_t st = spos + 6;
       size_t en = query.find('&', st);
       std::string param = (en == std::string::npos) ? query.substr(st) : query.substr(st, en - st);
       start = strtoul(param.c_str(), nullptr, 10);
     }
-
-    // Tương tự với end
-    // Nếu không có tham số end, mặc định là 0xFFFFFFFF
-    // Nếu có, lấy giá trị từ query
     size_t epos = query.find("end=");
     if (epos != std::string::npos) {
       size_t st = epos + 4;
@@ -641,114 +625,72 @@ void handleGetHistory(HTTPRequest * req, HTTPResponse * res) {
       std::string param = (en == std::string::npos) ? query.substr(st) : query.substr(st, en - st);
       end = strtoul(param.c_str(), nullptr, 10);
     }
-    
-    // In ra log để kiểm tra tham số
-    File f = LittleFS.open(HISTORY_FILE, FILE_READ);// Mở file lịch sử 
-    if (!f) {// Nếu không mở được file, trả về mảng rỗng
+
+    File f = LittleFS.open(HISTORY_FILE, FILE_READ);
+    if (!f) {
       res->setHeader("Content-Type", "application/json");
       res->print("[]");
       return;
     }
-
-    // Tạo mảng JSON để lưu lịch sử
-    // Sử dụng DynamicJsonBuffer để có thể chứa nhiều bản ghi
     DynamicJsonBuffer jsonBuffer(2048);
-    JsonArray& arr = jsonBuffer.createArray();// Tạo mảng JSON để lưu các bản ghi lịch sử
+    JsonArray& arr = jsonBuffer.createArray();
     HistoryRecord rec;
-
-    // Đọc từng bản ghi trong file và kiểm tra thời gian
-    // Nếu bản ghi nằm trong khoảng thời gian start và end, thêm vào mảng JSON
     while (f.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-      if (rec.epochtime >= start && rec.epochtime <= end) {// Nếu bản ghi nằm trong khoảng thời gian
-        // Tạo một đối tượng JSON mới và thêm vào mảng
+      if (rec.epochtime >= start && rec.epochtime <= end) {
         JsonObject& obj = arr.createNestedObject();
         obj["user"] = rec.userCode;
         obj["state"] = rec.state;
         obj["epochtime"] = rec.epochtime;
       }
     }
-
     f.close();
-    res->setHeader("Content-Type", "application/json");// Set content type for JSON response
-    // In mảng JSON vào  response
+    res->setHeader("Content-Type", "application/json");
     arr.printTo(*res);
   }
 
-
-  //xử lý sự kiện POST tới /api/events bằng cách đọc body JSON và lưu thông tin sự kiện mới
-  //client sẽ gửi thông tin về người dùng, trạng thái và thời gian
-  //sau đó server sẽ lưu thông tin này vào mảng events và trả về thông tin đã lưu
-  //cũng như thời gian thực và epochtime
 void handlePostEvent(HTTPRequest * req, HTTPResponse * res) {
+  // Đọc body JSON
 
-  // We expect an object with 4 elements and add some buffer
-  const size_t capacity = JSON_OBJECT_SIZE(4) + 180;
-  DynamicJsonBuffer jsonBuffer(capacity);
+  // DynamicJsonBuffer jsonBuffer(256);
+  // JsonObject& obj = jsonBuffer.parseObject(*req);
+  // if (!obj.success()) {
+  //   res->setStatusCode(400);
+  //   res->setStatusText("Bad Request");
+  //   res->println("400 Bad Request: Invalid JSON");
+  //   return;
+  // }
 
-  // Create buffer to read request
-  char * buffer = new char[capacity + 1];
-  memset(buffer, 0, capacity+1);
+  // // Lấy giá trị state và user
+  // int state = obj.containsKey("state") ? obj["state"] : -1;
+  // const char* user = obj.containsKey("user") ? obj["user"] : "";
 
-  // Try to read request into buffer
-  size_t idx = 0;
-  // while "not everything read" or "buffer is full"
-  while (!req->requestComplete() && idx < capacity) {
-    idx += req->readChars(buffer + idx, capacity-idx);
-  }
+  // // Lấy thời gian thực và epochtime
+  // unsigned long now = millis() / 1000;
+  // time_t epochtime = now;
 
-  // If the request is still not read completely, we cannot process it.
-  if (!req->requestComplete()) {
-    res->setStatusCode(413);
-    res->setStatusText("Request entity too large");
-    res->println("413 Request entity too large");
-    // Clean up
-    delete[] buffer;
-    return;
-  }
- 
-  // Parse the object
-  JsonObject& obj = jsonBuffer.parseObject(buffer);
+  // // In ra log
+  // Serial.print("User: ");
+  // Serial.print(user);
+  // Serial.print(", State: ");
+  // Serial.print(state);
+  // Serial.print(" (");
+  // if (state == 1) Serial.print("mở");
+  // else if (state == 2) Serial.print("đóng");
+  // else Serial.print("lỗi");
+  // Serial.print("), Thời gian thực: ");
+  // Serial.print(now);
+  // Serial.print(", Epoch: ");
+  // Serial.println(epochtime);
 
-  // Kiểm tra xem body có hợp lệ không
-  if (!obj.success()) {
-    res->setStatusCode(400);
-    res->setStatusText("Bad Request");
-    res->println("400 Bad Request: Invalid JSON");
-    return;
-  }
-
-  // Lấy giá trị state và user
-  int state = obj.containsKey("state") ? obj["state"] : -1;
-  const char* user = "";
-  if (obj.containsKey("user")) user = obj["user"];
-
-  // Lấy thời gian thực và epochtime
-  unsigned long now = millis() / 1000;
-  time_t epochtime = now;
-
-  // In ra log
-  Serial.print("User: ");
-  Serial.print(user);
-  Serial.print(", State: ");
-  Serial.print(state);
-  Serial.print(" (");
-  if (state == 1) Serial.print("mở");
-  else if (state == 2) Serial.print("đóng");
-  else Serial.print("lỗi");
-  Serial.print("), Thời gian thực: ");
-  Serial.print(now);
-  Serial.print(", Epoch: ");
-  Serial.println(epochtime);
-
-  // Trả về kết quả (có thể trả lại thông tin vừa nhận)
-  StaticJsonBuffer<128> outBuffer;
-  JsonObject& out = outBuffer.createObject();
-  out["user"] = user;
-  out["state"] = state;
-  out["time"] = now;
-  out["epochtime"] = epochtime;
-  res->setHeader("Content-Type", "application/json");
-  out.printTo(*res);
+  // // Trả về kết quả (có thể trả lại thông tin vừa nhận)
+  // StaticJsonBuffer<128> outBuffer;
+  // JsonObject& out = outBuffer.createObject();
+  // out["user"] = user;
+  // out["state"] = state;
+  // out["time"] = now;
+  // out["epochtime"] = epochtime;
+  // res->setHeader("Content-Type", "application/json");
+  // out.printTo(*res);
 }
 
 /**
@@ -851,24 +793,9 @@ void handleUploadFile(HTTPRequest * req, HTTPResponse * res) {
     return;
   }
 
-  LittleFS.mkdir(DIR_PUBLIC); // Ensure the public directory exists
-
   // Save file to /public
   std::string filepath = std::string(DIR_PUBLIC) + "/" + filename;
   File file = LittleFS.open(filepath.c_str(), FILE_WRITE);
-  
-  File root = LittleFS.open("/public");
-  if (!root || !root.isDirectory()) {
-    Serial.println("Folder /public does not exist or is not a directory.");
-    return;
-  }
-  Serial.println("Listing files in /public:");
-  File fileLs = root.openNextFile();
-  while (fileLs) {
-    Serial.println(fileLs.name());
-    fileLs = root.openNextFile();
-  }
-
   if (!file) {
     res->setStatusCode(500);
     res->setStatusText("Internal Server Error");

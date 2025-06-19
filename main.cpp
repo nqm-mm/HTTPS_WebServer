@@ -1,4 +1,3 @@
-
 /**
  * Example for the ESP32 HTTP(S) Webserver
  *
@@ -40,41 +39,6 @@
  *    the cert directory (so that the client cannot retrieve the private key)
  */
 
-/**
- * Ví dụ sử dụng các function API:
- * 
- * 1. Lấy uptime:
- *    - Gửi GET tới /api/uptime
- *    - Kết quả trả về: {"uptime": 12345}
- * 
- * 2. Lấy danh sách sự kiện:
- *    - Gửi GET tới /api/events
- *    - Kết quả trả về: [{"user":25,"state":1,"time":1710000000,"id":0}, ...]
- * 
- * 3. Thêm sự kiện mới:
- *    - Gửi POST tới /api/events với body JSON:
- *      {"user":25,"state":1,"time":1710000000}
- *    - Kết quả trả về: {"user":25,"state":1,"time":1710000000,"id":0}
- * 
- * 4. Xóa sự kiện:
- *    - Gửi DELETE tới /api/events/0
- *    - Kết quả trả về: HTTP 204 No Content
- * 
- * 5. Upload file:
- *    - Gửi POST tới /api/upload với multipart/form-data, trường "file" là file cần upload.
- *    - Kết quả trả về: {"success":true,"filename":"tenfile.txt"}
- * 
- * 6. Lấy danh sách file:
- *    - Gửi GET tới /api/fs/list
- *    - Kết quả trả về: [{"name":"/public/abc.txt","size":123,"isDir":false}, ...]
- * 
- * 7. Xóa file:
- *    - Gửi DELETE tới /api/fs/file/abc.txt
- *    - Kết quả trả về: HTTP 204 No Content
- * 
- * 8. Xem trang upload:
- *    - Truy cập GET /api/upload-page trên trình duyệt để xem giao diện upload file.
- */
 // TODO: Configure your WiFi here
 #define WIFI_SSID "I-Soft"
 #define WIFI_PSK  "i-soft@2023"
@@ -135,28 +99,24 @@ const char upload_html[] PROGMEM = R"rawliteral(
     <input type="file" name="file" required>
     <button type="submit">Upload</button>
   </form>
-  <div id="result"></div>
-  <div>
-    <label for="folderSelect">Select folder:</label>
-    <select id="folderSelect" onchange="listFiles()">
-      <option value="/public">/public</option>
-    </select>
-    <button onclick="listFiles()">Refresh File List</button>
-  </div>
+  <div id="result"></div>\
   <div id="listFiles">
-    <h3>Files</h3>
+    <h3>Files in /public</h3>
     <ul id="fileList"></ul>
+  </div>
+  <div>
+    <button onclick="listFiles()">Refresh File List</button>
   </div>
   <div id="Usege">
     <h3>Usage</h3>
+    <p>Upload files to the ESP32 server. The files will be stored in the /public directory.</p>
+    <p>After uploading, you can view and download the files from the list below.</p>
     <p id="memoryUsage"></p>
   </div>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       listFiles();
-      getMemoryUsage();
     });
-
     document.getElementById('uploadForm').onsubmit = async function(e) {
       e.preventDefault();
       const form = e.target;
@@ -170,35 +130,24 @@ const char upload_html[] PROGMEM = R"rawliteral(
         });
         const text = await res.text();
         resultDiv.textContent = text;
-        listFiles();
       } catch (err) {
         resultDiv.textContent = "Upload failed: " + err;
       }
     };
-
     async function listFiles() {
       const fileList = document.getElementById('fileList');
       fileList.innerHTML = '';
-      const folder = document.getElementById('folderSelect').value;
       try {
-        const res = await fetch('/api/fs/list?dir=' + folder);
+        const res = await fetch('/api/fs/list');
         if (!res.ok) throw new Error('Network response was not ok');
         const files = await res.json();
         files.forEach(file => {
           const li = document.createElement('li');
           li.textContent = `${file.name} (${file.size} bytes)`;
-          if (file.isDir) {
-            const btn = document.createElement('button');
-            btn.textContent = 'Open';
-            btn.onclick = function() {
-              setFolder(file.name);
-            };
-            li.appendChild(btn);
-          } else {
+          if (!file.isDir) {
             const link = document.createElement('a');
-            link.href = file.name;
+            link.href = `/public/${file.name}`;
             link.textContent = ' [Download]';
-            link.target = '_blank';
             li.appendChild(link);
           }
           fileList.appendChild(li);
@@ -207,34 +156,12 @@ const char upload_html[] PROGMEM = R"rawliteral(
         console.error('Error fetching file list:', err);
       }
     }
-        // Always add /public if not present
-        if (![...select.options].some(o => o.value === 'public')) {
-          const opt = document.createElement('option');
-          opt.value = 'public';
-          opt.textContent = '/public';
-          select.appendChild(opt);
-          opt.value = '';
-          opt.textContent = '/';
-          select.appendChild(opt);
-        }
-      } catch (err) {
-        console.error('Error fetching root folders:', err);
-      }
-    }
-
-    function setFolder(folder) {
-      const select = document.getElementById('folderSelect');
-      select.value = folder;
-      listFiles();
-    }
-
     async function getMemoryUsage() {
       try {
         const res = await fetch('/api/fs/usage');
         if (!res.ok) throw new Error('Network response was not ok');
         const data = await res.json();
-        document.getElementById('memoryUsage').textContent = 
-          `Total: ${data.totalBytes} bytes, Used: ${data.usedBytes} bytes, Free: ${data.freeBytes} bytes`;
+        document.getElementById('memoryUsage').textContent = `Free Memory: ${data.freeMemory} bytes`;
       } catch (err) {
         console.error('Error fetching memory usage:', err);
       }
@@ -252,7 +179,6 @@ void handleGetUptime(HTTPRequest * req, HTTPResponse * res);
 void handleGetEvents(HTTPRequest * req, HTTPResponse * res);
 void handlePostEvent(HTTPRequest * req, HTTPResponse * res);
 void handleDeleteEvent(HTTPRequest * req, HTTPResponse * res);
-void handleGetHistory(HTTPRequest * req, HTTPResponse * res);
 //handleUploadFile
 void handleUploadFile(HTTPRequest * req, HTTPResponse * res);
 // We use the following struct to store GPIO events:
@@ -271,8 +197,6 @@ struct {
 // We just create a reference to the server here. We cannot call the constructor unless
 // we have initialized the SPIFFS and read or created the certificate
 HTTPSServer * secureServer;
-
-#include "WebApi.h"
 
 void setup() {
   // For logging
@@ -323,25 +247,106 @@ void setup() {
     Serial.print(".");
     delay(500);
   }
-  Serial.println("Connected to WiFi");
-  Serial.print(" 🌐   IP address: ");
+  Serial.print("Connected. IP=");
   Serial.println(WiFi.localIP());
 
   // Create the server with the certificate we loaded before
   secureServer = new HTTPSServer(cert);
-  WebAPI();
+
+  // We register the SPIFFS handler as the default node, so every request that does
+  // not hit any other node will be redirected to the file system.
+  ResourceNode * LittleFSNode = new ResourceNode("", "", &handleLittleFS);
+  secureServer->setDefaultNode(LittleFSNode);
+
+  // Add a handler that serves the current system uptime at GET /api/uptime
+  ResourceNode * uptimeNode = new ResourceNode("/api/uptime", "GET", &handleGetUptime);
+  secureServer->registerNode(uptimeNode);
+
+  // Add the handler nodes that deal with modifying the events:
+  ResourceNode * getEventsNode = new ResourceNode("/api/events", "GET", &handleGetEvents);
+  secureServer->registerNode(getEventsNode);
+  ResourceNode * postEventNode = new ResourceNode("/api/events", "POST", &handlePostEvent);
+  secureServer->registerNode(postEventNode);
+  ResourceNode * deleteEventNode = new ResourceNode("/api/events/*", "DELETE", &handleDeleteEvent);
+  secureServer->registerNode(deleteEventNode);
+  // Register the upload API endpoint in setup()
+  ResourceNode * uploadNode = new ResourceNode("/api/upload", "POST", &handleUploadFile);
+  secureServer->registerNode(uploadNode);
+  // API: GET /api/fs/list - List files in /public
+  ResourceNode * fsListNode = new ResourceNode("/api/fs/list", "GET", [](HTTPRequest * req, HTTPResponse * res) {
+    File root = LittleFS.open(DIR_PUBLIC);
+    if (!root || !root.isDirectory()) {
+      res->setStatusCode(500);
+      res->setStatusText("Internal Server Error");
+      res->println("500 Internal Server Error: Cannot open directory");
+      return;
+    }
+    DynamicJsonBuffer jsonBuffer(2048);
+    JsonArray& arr = jsonBuffer.createArray();
+    File file = root.openNextFile();
+    while (file) {
+      JsonObject& obj = arr.createNestedObject();
+      obj["name"] = file.name();
+      obj["size"] = file.size();
+      obj["isDir"] = file.isDirectory();
+      file = root.openNextFile();
+    }
+    res->setHeader("Content-Type", "application/json");
+    arr.printTo(*res);
+  });
+  secureServer->registerNode(fsListNode);
+
+  // API: DELETE /api/fs/file/* - Delete file in /public
+  ResourceNode * fsDeleteNode = new ResourceNode("/api/fs/file/*", "DELETE", [](HTTPRequest * req, HTTPResponse * res) {
+    ResourceParameters * params = req->getParams();
+    std::string fname = params->getPathParameter(0);
+    if (fname.empty() || fname.find("..") != std::string::npos) {
+      res->setStatusCode(400);
+      res->setStatusText("Bad Request");
+      res->println("400 Bad Request");
+      return;
+    }
+    std::string path = std::string(DIR_PUBLIC) + "/" + fname;
+    if (!LittleFS.exists(path.c_str())) {
+      res->setStatusCode(404);
+      res->setStatusText("Not Found");
+      res->println("404 Not Found");
+      return;
+    }
+    if (LittleFS.remove(path.c_str())) {
+      res->setStatusCode(204);
+      res->setStatusText("No Content");
+    } else {
+      res->setStatusCode(500);
+      res->setStatusText("Internal Server Error");
+      res->println("500 Internal Server Error: Cannot delete file");
+    }
+  });
+  secureServer->registerNode(fsDeleteNode);
+
+  // API: GET /api/fs/usage - Get FS usage info
+  ResourceNode * fsUsageNode = new ResourceNode("/api/fs/usage", "GET", [](HTTPRequest * req, HTTPResponse * res) {
+    StaticJsonBuffer<JSON_OBJECT_SIZE(3)> jsonBuffer;
+    JsonObject& obj = jsonBuffer.createObject();
+    obj["totalBytes"] = LittleFS.totalBytes();
+    obj["usedBytes"] = LittleFS.usedBytes();
+    obj["freeBytes"] = LittleFS.totalBytes() - LittleFS.usedBytes();
+    res->setHeader("Content-Type", "application/json");
+    obj.printTo(*res);
+  });
+  secureServer->registerNode(fsUsageNode);
+  // Đăng ký endpoint GET /api/upload-page để trả về trang upload_html
+  ResourceNode * uploadPageNode = new ResourceNode("/api/upload-page", "GET", [](HTTPRequest * req, HTTPResponse * res) {
+    res->setHeader("Content-Type", "text/html; charset=UTF-8");
+    res->print(upload_html);
+  });
+  secureServer->registerNode(uploadPageNode);
   Serial.println("Starting server...");
   secureServer->start();
   if (secureServer->isRunning()) {
     Serial.println("Server ready.");
   }
-
-  
 }
-
-#include <EEPROM.h>
-long resetcounter = 0;
-byte DoorState = 0; // 0: Closed, 1: Open, 2: Stopped
 
 void loop() {
   // This call will let the server do its work
@@ -362,25 +367,13 @@ void loop() {
       }
     }
   }
-    static long lastLoopTime = millis();
-    if (millis() - lastLoopTime >= 10000) { // Run every second
-        lastLoopTime = millis();
-        Serial.println("\n=================================================");
-        Serial.println("DoorLocker loop running...");
-        Serial.println("  🖥️   Reset Counter: " + String(resetcounter));
-        Serial.println("  🚪   Door state: " + String(DoorState ? "Open" : "Closed"));
-        Serial.println("  💾   Free Heap: " + String(ESP.getFreeHeap() / 1024) + "Kb");
-        Serial.println("  🎞   Free PSRAM: " + String(ESP.getFreePsram() / 1024) + "Kb");
-        Serial.println("  🌡️  Chip : " + String(temperatureRead()) + " °C");
-        Serial.println("=================================================\n");
-        // DoorStates();
-    } 
+
   // Other code would go here...
   delay(1);
-}//loop
+}
 
 /**
- * This function will either read the certificate and private key from LittleFS or
+ * This function will either read the certificate and private key from SPIFFS or
  * create a self-signed certificate and write it to SPIFFS for next boot
  */
 SSLCert * getCertificate() {
@@ -465,10 +458,12 @@ SSLCert * getCertificate() {
 }
 
 /**
- * This handler function will try to load the requested resource from LittleFS's /public folder.
+ * This handler function will try to load the requested resource from SPIFFS's /public folder.
+ * 
  * If the method is not GET, it will throw 405, if the file is not found, it will throw 404.
  */
 void handleLittleFS(HTTPRequest * req, HTTPResponse * res) {
+	
   // We only handle GET here
   if (req->getMethod() == "GET") {
     // Redirect / to /index.html
@@ -508,8 +503,8 @@ void handleLittleFS(HTTPRequest * req, HTTPResponse * res) {
       length = file.read(buffer, 256);
       res->write(buffer, length);
     } while (length > 0);
-    file.close();
 
+    file.close();
   } else {
     // If there's any body, discard it
     req->discardRequestBody();
@@ -569,118 +564,8 @@ void handleGetEvents(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Content-Type", "application/json");
   arr.printTo(*res);
 }
-  
-unsigned long eTime = 0;
-int eGpio = 0;
-int eState = LOW;
 
-
-  /**
-   * Ghi lịch sử vào file nhị phân (binary) để tiết kiệm bộ nhớ
-   * Mỗi bản ghi: userCode (uint32_t), state (uint8_t), time (uint32_t)
-   */
-  #define HISTORY_FILE "/history.bin"
-  struct HistoryRecord {
-    uint32_t userCode;
-    uint8_t state;
-    uint32_t epochtime;
-  };
-
-  /**
-   * Lưu lịch sử vào file nhị phân
-   * userCode: mã người dùng (uint32_t)
-   * state: trạng thái (uint8_t)
-   * epochtime: thời gian epoch (uint32_t)
-   */
-void saveHistory(uint32_t userCode, uint8_t state, uint32_t epochtime) {
-    File f = LittleFS.open(HISTORY_FILE, FILE_APPEND);
-    if (!f) return;
-    HistoryRecord rec;
-    rec.userCode = userCode;
-    rec.state = state;
-    rec.epochtime = epochtime;
-    f.write((const uint8_t*)&rec, sizeof(rec));
-    f.close();
-  }
-
-  /**
-   * API: GET /api/history?start=epochtime&end=epochtime
-   * Trả về danh sách lịch sử trong khoảng thời gian
-   */
-void handleGetHistory(HTTPRequest * req, HTTPResponse * res) {
-    // Lấy tham số start, end
-    std::string reqStr = req->getRequestString();// Lấy chuỗi yêu cầu từ HTTPRequest
-    std::string query;// Biến để lưu phần query string
-    size_t qpos = reqStr.find('?');// Tìm vị trí dấu hỏi trong chuỗi yêu cầu
-
-    // Nếu có dấu hỏi, lấy phần sau dấu hỏi làm query
-    if (qpos != std::string::npos) {
-      query = reqStr.substr(qpos + 1);// Lấy phần sau dấu hỏi
-    } else {
-      query = "";
-    }
-
-    // Mặc định start = 0, end = 0xFFFFFFFF (tức là toàn bộ lịch sử)
-    uint32_t start = 0, end = 0xFFFFFFFF;
-    size_t spos = query.find("start=");
-    if (spos != std::string::npos) {// Tìm tham số start trong query
-      // Nếu có, lấy giá trị sau dấu "="
-      size_t st = spos + 6;
-      size_t en = query.find('&', st);
-      std::string param = (en == std::string::npos) ? query.substr(st) : query.substr(st, en - st);
-      start = strtoul(param.c_str(), nullptr, 10);
-    }
-
-    // Tương tự với end
-    // Nếu không có tham số end, mặc định là 0xFFFFFFFF
-    // Nếu có, lấy giá trị từ query
-    size_t epos = query.find("end=");
-    if (epos != std::string::npos) {
-      size_t st = epos + 4;
-      size_t en = query.find('&', st);
-      std::string param = (en == std::string::npos) ? query.substr(st) : query.substr(st, en - st);
-      end = strtoul(param.c_str(), nullptr, 10);
-    }
-    
-    // In ra log để kiểm tra tham số
-    File f = LittleFS.open(HISTORY_FILE, FILE_READ);// Mở file lịch sử 
-    if (!f) {// Nếu không mở được file, trả về mảng rỗng
-      res->setHeader("Content-Type", "application/json");
-      res->print("[]");
-      return;
-    }
-
-    // Tạo mảng JSON để lưu lịch sử
-    // Sử dụng DynamicJsonBuffer để có thể chứa nhiều bản ghi
-    DynamicJsonBuffer jsonBuffer(2048);
-    JsonArray& arr = jsonBuffer.createArray();// Tạo mảng JSON để lưu các bản ghi lịch sử
-    HistoryRecord rec;
-
-    // Đọc từng bản ghi trong file và kiểm tra thời gian
-    // Nếu bản ghi nằm trong khoảng thời gian start và end, thêm vào mảng JSON
-    while (f.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-      if (rec.epochtime >= start && rec.epochtime <= end) {// Nếu bản ghi nằm trong khoảng thời gian
-        // Tạo một đối tượng JSON mới và thêm vào mảng
-        JsonObject& obj = arr.createNestedObject();
-        obj["user"] = rec.userCode;
-        obj["state"] = rec.state;
-        obj["epochtime"] = rec.epochtime;
-      }
-    }
-
-    f.close();
-    res->setHeader("Content-Type", "application/json");// Set content type for JSON response
-    // In mảng JSON vào  response
-    arr.printTo(*res);
-  }
-
-
-  //xử lý sự kiện POST tới /api/events bằng cách đọc body JSON và lưu thông tin sự kiện mới
-  //client sẽ gửi thông tin về người dùng, trạng thái và thời gian
-  //sau đó server sẽ lưu thông tin này vào mảng events và trả về thông tin đã lưu
-  //cũng như thời gian thực và epochtime
 void handlePostEvent(HTTPRequest * req, HTTPResponse * res) {
-
   // We expect an object with 4 elements and add some buffer
   const size_t capacity = JSON_OBJECT_SIZE(4) + 180;
   DynamicJsonBuffer jsonBuffer(capacity);
@@ -705,50 +590,79 @@ void handlePostEvent(HTTPRequest * req, HTTPResponse * res) {
     delete[] buffer;
     return;
   }
- 
-  // Parse the object
-  JsonObject& obj = jsonBuffer.parseObject(buffer);
 
-  // Kiểm tra xem body có hợp lệ không
-  if (!obj.success()) {
+  // Parse the object
+  JsonObject& reqObj = jsonBuffer.parseObject(buffer);
+
+  // Check input data types
+  bool dataValid = true;
+  if (!reqObj.is<long>("time") || !reqObj.is<int>("gpio") || !reqObj.is<int>("state")) {
+    dataValid = false;
+  }
+	
+  // Check actual values
+  unsigned long eTime = 0;
+  int eGpio = 0;
+  int eState = LOW;
+  if (dataValid) {
+    eTime = reqObj["time"];
+    if (eTime < millis()/1000) dataValid = false;
+
+    eGpio = reqObj["gpio"];
+    if (!(eGpio == 25 || eGpio == 26 || eGpio == 27 || eGpio == 32 || eGpio == 33)) dataValid = false;
+
+    eState = reqObj["state"];
+    if (eState != HIGH && eState != LOW) dataValid = false;
+  }
+
+  // Clean up, we don't need the buffer any longer
+  delete[] buffer;
+
+  // If something failed: 400
+  if (!dataValid) {
     res->setStatusCode(400);
     res->setStatusText("Bad Request");
-    res->println("400 Bad Request: Invalid JSON");
+    res->println("400 Bad Request");
     return;
   }
 
-  // Lấy giá trị state và user
-  int state = obj.containsKey("state") ? obj["state"] : -1;
-  const char* user = "";
-  if (obj.containsKey("user")) user = obj["user"];
+  // Try to find an inactive event in the list to write the data to
+  int eventID = -1;
+  for(int i = 0; i < MAX_EVENTS && eventID==-1; i++) {
+    if (!events[i].active) {
+      eventID = i;
+      events[i].gpio = eGpio;
+      events[i].time = eTime;
+      events[i].state = eState;
+      events[i].active = true;
+    }
+  }
 
-  // Lấy thời gian thực và epochtime
-  unsigned long now = millis() / 1000;
-  time_t epochtime = now;
+  // Check if we could store the event
+  if (eventID>-1) {
+    // Create a buffer for the response
+    StaticJsonBuffer<JSON_OBJECT_SIZE(4)> resBuffer;
 
-  // In ra log
-  Serial.print("User: ");
-  Serial.print(user);
-  Serial.print(", State: ");
-  Serial.print(state);
-  Serial.print(" (");
-  if (state == 1) Serial.print("mở");
-  else if (state == 2) Serial.print("đóng");
-  else Serial.print("lỗi");
-  Serial.print("), Thời gian thực: ");
-  Serial.print(now);
-  Serial.print(", Epoch: ");
-  Serial.println(epochtime);
+    // Create an object at the root
+    JsonObject& resObj = resBuffer.createObject();
 
-  // Trả về kết quả (có thể trả lại thông tin vừa nhận)
-  StaticJsonBuffer<128> outBuffer;
-  JsonObject& out = outBuffer.createObject();
-  out["user"] = user;
-  out["state"] = state;
-  out["time"] = now;
-  out["epochtime"] = epochtime;
-  res->setHeader("Content-Type", "application/json");
-  out.printTo(*res);
+    // Set the uptime key to the uptime in seconds
+    resObj["gpio"] = events[eventID].gpio;
+    resObj["state"] = events[eventID].state;
+    resObj["time"] = events[eventID].time;
+    resObj["id"] = eventID;
+
+    // Write the response
+    res->setHeader("Content-Type", "application/json");
+    resObj.printTo(*res);
+
+  } else {
+    // We could not store the event, no free slot.
+    res->setStatusCode(507);
+    res->setStatusText("Insufficient storage");
+    res->println("507 Insufficient storage");
+
+  }
 }
 
 /**
@@ -851,24 +765,9 @@ void handleUploadFile(HTTPRequest * req, HTTPResponse * res) {
     return;
   }
 
-  LittleFS.mkdir(DIR_PUBLIC); // Ensure the public directory exists
-
   // Save file to /public
   std::string filepath = std::string(DIR_PUBLIC) + "/" + filename;
   File file = LittleFS.open(filepath.c_str(), FILE_WRITE);
-  
-  File root = LittleFS.open("/public");
-  if (!root || !root.isDirectory()) {
-    Serial.println("Folder /public does not exist or is not a directory.");
-    return;
-  }
-  Serial.println("Listing files in /public:");
-  File fileLs = root.openNextFile();
-  while (fileLs) {
-    Serial.println(fileLs.name());
-    fileLs = root.openNextFile();
-  }
-
   if (!file) {
     res->setStatusCode(500);
     res->setStatusText("Internal Server Error");
